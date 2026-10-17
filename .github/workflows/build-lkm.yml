@@ -8,7 +8,6 @@ jobs:
       matrix:
         kmi:
           - android12-5.10
-          - android13-5.10
     uses: ./.github/workflows/ddk-lkm.yml
     with:
       kmi: ${{ matrix.kmi }}

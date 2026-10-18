@@ -18,7 +18,7 @@ jobs:
       run: |
         rustup update stable
         rustup target add aarch64-linux-android
-        rustup target add x86_64-linux-android
+        #rustup target add x86_64-linux-android
 
     - uses: nttld/setup-ndk@v1
       id: setup-ndk
@@ -49,6 +49,7 @@ jobs:
         path: userspace/ksuinit/target/aarch64-linux-android/release/ksuinit*
 
     - name: Build ksuinit x64
+      if: false
       env:
         ANDROID_NDK_HOME: ${{ steps.setup-ndk.outputs.ndk-path }}
       run: |
@@ -61,12 +62,14 @@ jobs:
         cargo build --target=x86_64-linux-android --release
 
     - name: Upload x64 ksuinit artifact
+      if: false
       uses: actions/upload-artifact@v7
       with:
         name: ksuinit-x86_64
         path: userspace/ksuinit/target/x86_64-linux-android/release/ksuinit*
 
   build-riscv64:
+    if: false
     runs-on: ${{ inputs.os }}
     steps:
     - uses: actions/checkout@v7

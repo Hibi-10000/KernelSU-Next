@@ -332,6 +332,8 @@ static void samsung_setresuid_hook_exit(void)
     ksu_setuid_hook_exit();
 }
 
+#endif
+
 #if defined(__riscv)
 #include "hook/riscv64/syscall_regs.h"
 #endif

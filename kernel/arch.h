@@ -57,6 +57,13 @@
 #endif
 
 #define PT_REGS_PARM1(x) (__PT_REGS_CAST(x)->__PT_PARM1_REG)
+/* RISC-V saves syscall argument zero before using a0 as the return slot.
+ * Kprobe C-call arguments still use the live first argument register.
+ */
+#ifndef __PT_SYSCALL_PARM1_REG
+#define __PT_SYSCALL_PARM1_REG __PT_PARM1_REG
+#endif
+#define PT_REGS_SYSCALL_PARM1(x) (__PT_REGS_CAST(x)->__PT_SYSCALL_PARM1_REG)
 #define PT_REGS_PARM2(x) (__PT_REGS_CAST(x)->__PT_PARM2_REG)
 #define PT_REGS_PARM3(x) (__PT_REGS_CAST(x)->__PT_PARM3_REG)
 #define PT_REGS_SYSCALL_PARM4(x) (__PT_REGS_CAST(x)->__PT_SYSCALL_PARM4_REG)

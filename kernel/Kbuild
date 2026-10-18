@@ -4,6 +4,7 @@ kernelsu-objs += compat/samsung_kdp.o
 kernelsu-objs += compat/samsung_defex.o
 
 kernelsu-objs += feature/kernel_umount.o
+kernelsu-objs += feature/module_blacklist.o
 kernelsu-objs += feature/sulog.o
 kernelsu-objs += feature/sucompat.o
 
@@ -18,6 +19,9 @@ kernelsu-objs += hook/arm64/syscall_hook.o
 else ifeq ($(CONFIG_X86_64),y)
 kernelsu-objs += hook/x86_64/patch_memory.o
 kernelsu-objs += hook/x86_64/syscall_hook.o
+else ifeq ($(CONFIG_RISCV),y)
+kernelsu-objs += hook/riscv64/patch_memory.o
+kernelsu-objs += hook/riscv64/syscall_hook.o
 endif
 kernelsu-objs += extras.o
 
@@ -57,6 +61,7 @@ kernelsu-objs += supercall/supercall.o
 kernelsu-objs += feature/adb_root.o
 
 kernelsu-objs += feature/selinux_hide.o
+kernelsu-objs += feature/shell_su_adb_only.o
 
 ifdef KBUILD_EXTMOD
 ifeq ($(CONFIG_KSU_DISABLE_MANAGER),y)

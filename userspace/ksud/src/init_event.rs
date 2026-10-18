@@ -1,4 +1,4 @@
-use crate::module::{handle_updated_modules, prune_modules};
+use crate::module::{ScriptWait, handle_updated_modules, prune_modules};
 use crate::utils::is_safe_mode;
 use crate::{
     assets, defs, ksucalls, metamodule, restorecon,
@@ -6,16 +6,18 @@ use crate::{
 };
 use anyhow::{Context, Result};
 use log::{error, info, warn};
-use std::path::Path;
+use std::{path::Path, time::Instant};
 
-
-pub fn on_post_data_fs() -> Result<()> {
-    // Journal any mounts created during post-fs-data (module post-fs-data.sh
-    // scripts, common post-fs-data.d, and the metamodule mount script)
-    crate::cleanup::record_mount_journal(on_post_data_fs_impl)
+pub fn on_post_fs_data() -> Result<()> {
+    crate::cleanup::record_mount_journal(on_post_fs_data_impl)
 }
 
-fn on_post_data_fs_impl() -> Result<()> {
+// Compatibility entry point retained for the Galaxy soft-reboot path.
+pub fn on_post_data_fs() -> Result<()> {
+    on_post_fs_data()
+}
+
+fn on_post_fs_data_impl() -> Result<()> {
     if let Err(e) = ksucalls::ensure_uapi_version_matched() {
         error!("{e:#}, skip on_post_fs_data");
         return Ok(());
@@ -30,9 +32,7 @@ fn on_post_data_fs_impl() -> Result<()> {
         warn!("clear temp configs failed: {e}");
     }
 
-    #[cfg(unix)]
     let _ = catch_bootlog("logcat", &["logcat", "-b", "all"]);
-    #[cfg(unix)]
     let _ = catch_bootlog("dmesg", &["dmesg", "-w", "-r"]);
 
     if utils::has_magisk() {
@@ -41,6 +41,7 @@ fn on_post_data_fs_impl() -> Result<()> {
     }
 
     let safe_mode = crate::utils::is_safe_mode();
+    let wait = ScriptWait::Until(Instant::now() + defs::BOOT_STAGE_TIMEOUT);
 
     if safe_mode {
         // we should still ensure module directory exists in safe mode
@@ -48,7 +49,7 @@ fn on_post_data_fs_impl() -> Result<()> {
         warn!("safe mode, skip common post-fs-data.d scripts");
     } else {
         // Then exec common post-fs-data scripts
-        if let Err(e) = crate::module::exec_common_scripts("post-fs-data.d", true) {
+        if let Err(e) = crate::module::exec_common_scripts("post-fs-data.d", wait) {
             warn!("exec common post-fs-data scripts failed: {e}");
         }
     }
@@ -64,6 +65,10 @@ fn on_post_data_fs_impl() -> Result<()> {
             warn!("disable all modules failed: {e}");
         }
         return Ok(());
+    }
+
+    if let Err(e) = crate::susfsd::load_if_autoload_enabled() {
+        warn!("SUSFS auto-load failed: {e:#}");
     }
 
     if let Err(e) = handle_updated_modules() {
@@ -94,6 +99,8 @@ fn on_post_data_fs_impl() -> Result<()> {
         warn!("apply root profile sepolicy failed: {e}");
     }
 
+    crate::feature::init_forced_features();
+
     // load feature config
     if is_safe_mode() {
         warn!("safe mode, skip load feature config");
@@ -102,13 +109,12 @@ fn on_post_data_fs_impl() -> Result<()> {
     }
 
     // execute metamodule post-fs-data script first (priority)
-    if let Err(e) = metamodule::exec_stage_script("post-fs-data", true) {
+    if let Err(e) = metamodule::exec_stage_script("post-fs-data", wait) {
         warn!("exec metamodule post-fs-data script failed: {e}");
     }
 
     // exec modules post-fs-data scripts
-    // TODO: Add timeout
-    if let Err(e) = crate::module::exec_stage_script("post-fs-data", true) {
+    if let Err(e) = crate::module::exec_stage_script("post-fs-data", wait) {
         warn!("exec post-fs-data scripts failed: {e}");
     }
 
@@ -123,8 +129,7 @@ fn on_post_data_fs_impl() -> Result<()> {
     }
 
     ksucalls::report_module_mounted();
-
-    run_stage("post-mount", true);
+    run_stage("post-mount", wait);
 
     sync_kernel_umount_list();
 
@@ -145,9 +150,9 @@ pub fn sync_kernel_umount_list() {
 /// Public stage runner. Journals any mounts made by stage scripts — universal:
 /// covers modules that mount from their own service.sh/post-fs-data.sh, not
 /// just the metamodule's metamount.sh.
-pub fn run_stage(stage: &str, block: bool) {
+pub fn run_stage(stage: &str, wait: ScriptWait) {
     if let Err(e) = crate::cleanup::record_mount_journal(|| {
-        run_stage_impl(stage, block);
+        run_stage_impl(stage, wait);
         Ok(())
     }) {
         warn!("mount journal recording failed for stage {stage}: {e}");
@@ -155,7 +160,7 @@ pub fn run_stage(stage: &str, block: bool) {
     sync_kernel_umount_list();
 }
 
-fn run_stage_impl(stage: &str, block: bool) {
+fn run_stage_impl(stage: &str, wait: ScriptWait) {
     utils::umask(0);
 
     if utils::has_magisk() {
@@ -168,17 +173,17 @@ fn run_stage_impl(stage: &str, block: bool) {
         return;
     }
 
-    if let Err(e) = crate::module::exec_common_scripts(&format!("{stage}.d"), block) {
+    if let Err(e) = crate::module::exec_common_scripts(&format!("{stage}.d"), wait) {
         warn!("Failed to exec common {stage} scripts: {e}");
     }
 
     // execute metamodule stage script first (priority)
-    if let Err(e) = metamodule::exec_stage_script(stage, block) {
+    if let Err(e) = metamodule::exec_stage_script(stage, wait) {
         warn!("Failed to exec metamodule {stage} script: {e}");
     }
 
     // execute regular modules stage scripts
-    if let Err(e) = crate::module::exec_stage_script(stage, block) {
+    if let Err(e) = crate::module::exec_stage_script(stage, wait) {
         warn!("Failed to exec {stage} scripts: {e}");
     }
 }
@@ -189,10 +194,22 @@ pub fn on_services() {
         return;
     }
 
+    match ksucalls::report_services() {
+        Ok(true) => {}
+        Ok(false) => {
+            info!("services already started, skipping");
+            return;
+        }
+        Err(e) => {
+            error!("Failed to report services: {e:#}");
+            return;
+        }
+    }
+
     info!("on_services triggered! Waiting for PMS package scan completion...");
     crate::soft_reboot::wait_pms_ready(std::time::Duration::from_secs(90));
     info!("PMS scan complete, executing service stage scripts");
-    run_stage("service", false);
+    run_stage("service", ScriptWait::NoWait);
 }
 
 pub fn on_boot_completed() {
@@ -204,10 +221,9 @@ pub fn on_boot_completed() {
     ksucalls::report_boot_complete();
     info!("on_boot_completed triggered!");
 
-    run_stage("boot-completed", false);
+    run_stage("boot-completed", ScriptWait::NoWait);
 }
 
-#[cfg(unix)]
 fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {
 
     use std::os::unix::process::CommandExt;
@@ -224,7 +240,7 @@ fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {
 
     let bootlog = std::fs::File::create(bootlog)?;
 
-    let mut args = vec!["-s", "9", "30s"];
+    let mut args = vec!["-s", "9", defs::BOOTLOG_TIMEOUT];
     args.extend_from_slice(command);
     // timeout -s 9 30s logcat > boot.log
     let result = unsafe {
@@ -245,4 +261,3 @@ fn catch_bootlog(logname: &str, command: &[&str]) -> Result<()> {
 
     Ok(())
 }
-

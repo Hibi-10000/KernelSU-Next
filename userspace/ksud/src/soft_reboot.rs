@@ -19,6 +19,7 @@ use std::time::{Duration, Instant};
 
 use crate::utils::switch_mnt_ns;
 use crate::{init_event, ksucalls};
+use crate::module::ScriptWait;
 
 use prop_rs_android::resetprop::ResetProp;
 use prop_rs_android::sys_prop;
@@ -267,6 +268,7 @@ fn snapshot_state(log_dir: &Path) -> Result<()> {
         .map(|o| fs::write(log_dir.join("getprop.txt"), o.stdout));
 
     Ok(())
+
 }
 
 const fn resetprop() -> ResetProp {
@@ -397,7 +399,7 @@ pub fn run(source: SoftRebootSource) -> Result<()> {
     // ran at this point; modules may hook emulated-soft-reboot.d). Blocking, before
     // any teardown begins.
     info!("soft_reboot: running emulated-soft-reboot stage");
-    init_event::run_stage("emulated-soft-reboot", true);
+    init_event::run_stage("emulated-soft-reboot", ScriptWait::Forever);
 
     // === OPlus PHOENIX / critical-service crash neutralisation ===
     // OPlus init has a PHOENIX handler (phx_is_bootup_critical_service) that
@@ -697,7 +699,7 @@ fn sanitize_adb_dir_permissions() {
     // Run service stage scripts early so background module daemons (vectord, lspd, etc.)
     // register their ServiceManager proxy binders before system_server forks
     info!("soft_reboot: executing service stage scripts");
-    init_event::run_stage("service", false);
+    init_event::run_stage("service", ScriptWait::NoWait);
 
     // Start all services
     info!("soft_reboot: running 'start'");

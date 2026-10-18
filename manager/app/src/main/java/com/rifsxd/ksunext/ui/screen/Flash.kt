@@ -29,6 +29,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.tooling.preview.Preview
 import androidx.compose.ui.unit.dp
+import androidx.core.text.BidiFormatter
 import androidx.lifecycle.compose.dropUnlessResumed
 import com.ramcosta.composedestinations.annotation.Destination
 import com.ramcosta.composedestinations.annotation.RootGraph
@@ -205,7 +206,7 @@ fun FlashScreen(
                 logContent.append(it).append("\n")
             }).apply {
                 if (code != 0) {
-                    text += "Error code: $code.\n $err Please save and check the log.\n"
+                    text += context.getString(R.string.flash_error_output, code, err)
                 }
                 if (showReboot) {
                     text += "\n\n\n"
@@ -232,7 +233,7 @@ fun FlashScreen(
                             "KernelSU_Next_install_log_${date}.log"
                         )
                         file.writeText(logContent.toString())
-                        snackBarHost.showSnackbar("Log saved to ${file.absolutePath}")
+                        snackBarHost.showSnackbar(context.getString(R.string.log_saved_to, BidiFormatter.getInstance().unicodeWrap(file.absolutePath)))
                     }
                 },
                 scrollBehavior = scrollBehavior
@@ -442,8 +443,14 @@ fun Uri.getFileName(context: Context): String {
 
 @Parcelize
 sealed class FlashIt : Parcelable {
-    data class FlashBoot(val boot: Uri? = null, val lkm: LkmSelection, val ota: Boolean, val allowShell: Boolean = false, val enableAdb: Boolean = false) :
-        FlashIt()
+    data class FlashBoot(
+        val boot: Uri? = null,
+        val lkm: LkmSelection,
+        val ota: Boolean,
+        val allowShell: Boolean = false,
+        val enableAdb: Boolean = false,
+        val blockModules: String = ""
+    ) : FlashIt()
 
     data class FlashModules(val uris: List<Uri>) : FlashIt()
 
@@ -466,6 +473,7 @@ fun flashIt(
             flashIt.ota,
             flashIt.allowShell,
             flashIt.enableAdb,
+            flashIt.blockModules,
             onStdout,
             onStderr
         )
@@ -526,7 +534,7 @@ private fun TopBar(
             ) {
                 Icon(
                     imageVector = Icons.Filled.Save,
-                    contentDescription = "Localized description"
+                    contentDescription = null
                 )
             }
         },

@@ -8,6 +8,7 @@
 #include <linux/fs.h>
 #include <linux/err.h>
 #include <linux/cred.h>
+#include <linux/ptrace.h>
 
 #include "ksu_kallsyms.h"
 

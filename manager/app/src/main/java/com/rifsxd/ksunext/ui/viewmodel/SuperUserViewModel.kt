@@ -231,6 +231,10 @@ class SuperUserViewModel : ViewModel() {
             isRefreshing = true
 
             try {
+                if (!Shell.getShell().isRoot) {
+                    throw IllegalStateException("Root access is required")
+                }
+
                 val start = SystemClock.elapsedRealtime()
 
                 val (binder, _) = connectKsuService {

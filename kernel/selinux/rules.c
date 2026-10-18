@@ -66,6 +66,7 @@ void apply_kernelsu_rules()
     }
 
     mutex_lock(&selinux_state.policy_mutex);
+
     old_pol = rcu_dereference_protected(selinux_state.policy, lockdep_is_held(&selinux_state.policy_mutex));
     if (!old_pol) {
         pr_warn("SELinux policy is NULL or not loaded yet. Skipping SELinux rules application.\n");
@@ -176,6 +177,8 @@ void apply_kernelsu_rules()
     ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "getpgid");
     ksu_allow(db, "system_server", KERNEL_SU_DOMAIN, "process", "sigkill");
 
+    // Return value ignored: the policy is published either way.
+    ksu_policydb_fixup_len(db, "apply_kernelsu_rules");
     rcu_assign_pointer(selinux_state.policy, pol);
     synchronize_rcu();
     ksu_destroy_sepolicy(old_pol);
@@ -496,13 +499,13 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
 
     mutex_lock(&selinux_state.policy_mutex);
 
-    old_pol = rcu_dereference_protected(
-        selinux_state.policy, lockdep_is_held(&selinux_state.policy_mutex));
+    old_pol = rcu_dereference_protected(selinux_state.policy, lockdep_is_held(&selinux_state.policy_mutex));
     if (!old_pol) {
         pr_warn("SELinux policy is NULL or not loaded yet. Skipping ksu_handle_sepolicy.\n");
         ret = -EINVAL;
         goto out_unlock;
     }
+
     pol = ksu_dup_sepolicy(old_pol);
     if (IS_ERR(pol)) {
         ret = PTR_ERR(pol);
@@ -555,6 +558,8 @@ int handle_sepolicy(void __user *user_data, u64 data_len)
         cmd_index++;
     }
 
+    // Return value ignored: the policy is published either way.
+    ksu_policydb_fixup_len(db, "handle_sepolicy");
     rcu_assign_pointer(selinux_state.policy, pol);
     synchronize_rcu();
     ksu_destroy_sepolicy(old_pol);

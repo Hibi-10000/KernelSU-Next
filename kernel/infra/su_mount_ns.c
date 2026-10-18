@@ -22,22 +22,9 @@
 #include "util.h"
 #include "ksu_kallsyms.h"
 
-static long ksu_sys_setns(int fd, int flags)
-{
-    struct pt_regs regs;
-    memset(&regs, 0, sizeof(regs));
-
-    PT_REGS_PARM1(&regs) = fd;
-    PT_REGS_PARM2(&regs) = flags;
-
-#if defined(__aarch64__)
-    return ksu_syms.__arm64_sys_setns ? ksu_syms.__arm64_sys_setns(&regs) : -ENOSYS;
-#elif defined(__x86_64__)
-    return -ENOSYS;
-#else
-#error "Unsupported arch"
-#endif
-}
+extern int path_mount(const char *dev_name, struct path *path,
+                      const char *type_page, unsigned long flags,
+                      void *data_page);
 
 static inline void ksu_get_fs_pwd(struct fs_struct *fs, struct path *pwd)
 {
